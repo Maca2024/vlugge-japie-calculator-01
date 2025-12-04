@@ -1,0 +1,7 @@
+{
+  "name": "VLUGGE JAPIE - Interieurbouw AI",
+  "description": "De ultieme AI-calculator voor Jaap Schuurmans Meubelmakerij. Analyseert tekeningen, berekent zaaglijsten en optimaliseert plaatmateriaal.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
