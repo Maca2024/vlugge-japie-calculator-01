@@ -1,12 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { Logo } from './components/Logo';
-import { AnalysisView } from './components/AnalysisView';
-import { ChatDrawer } from './components/ChatDrawer';
-import { ProjectList } from './components/ProjectList';
 import { analyzeImage, createChatSession } from './services/geminiService';
 import { saveProject, getProjects } from './services/storageService';
 import { JapieResponse, AnalysisState } from './types';
 import { Camera, Loader2, MessageSquare, AlertCircle, History, ArrowLeft } from 'lucide-react';
+
+// Lazy load heavy components
+const AnalysisView = lazy(() => import('./components/AnalysisView').then(module => ({ default: module.AnalysisView })));
+const ChatDrawer = lazy(() => import('./components/ChatDrawer').then(module => ({ default: module.ChatDrawer })));
+const ProjectList = lazy(() => import('./components/ProjectList').then(module => ({ default: module.ProjectList })));
+
+// Loading fallback component
+const LoadingFallback: React.FC = () => (
+  <div className="flex items-center justify-center p-8">
+    <Loader2 className="w-8 h-8 text-brand-accent animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [state, setState] = useState<AnalysisState>('idle');
@@ -149,7 +158,9 @@ const App: React.FC = () => {
               </div>
             </div>
             {/* Show recent projects below */}
-            <ProjectList projects={projects.slice(0, 3)} onSelect={handleProjectSelect} />
+            <Suspense fallback={<LoadingFallback />}>
+              <ProjectList projects={projects.slice(0, 3)} onSelect={handleProjectSelect} />
+            </Suspense>
           </>
         )}
 
@@ -159,7 +170,9 @@ const App: React.FC = () => {
                     <h2 className="text-3xl font-bold text-white mb-2">Project Archief</h2>
                     <p className="text-gray-400">Database met alle voorgaande calculaties.</p>
                 </div>
-                <ProjectList projects={projects} onSelect={handleProjectSelect} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <ProjectList projects={projects} onSelect={handleProjectSelect} />
+                </Suspense>
             </div>
         )}
 
@@ -198,7 +211,9 @@ const App: React.FC = () => {
         )}
 
         {state === 'success' && result && (
-          <AnalysisView data={result} onReset={goHome} />
+          <Suspense fallback={<LoadingFallback />}>
+            <AnalysisView data={result} onReset={goHome} />
+          </Suspense>
         )}
       </main>
 
@@ -216,11 +231,13 @@ const App: React.FC = () => {
       )}
 
       {/* Chat Interface */}
-      <ChatDrawer 
-        isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
-        projectName={result?.project.naam || "Project"} 
-      />
+      <Suspense fallback={null}>
+        <ChatDrawer 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)} 
+          projectName={result?.project.naam || "Project"} 
+        />
+      </Suspense>
     </div>
   );
 };
