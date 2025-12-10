@@ -3,17 +3,17 @@ import { JapieResponse } from "../types";
 const STORAGE_KEY = 'japie_projects_v1';
 const ID_SEQUENCE_KEY = 'japie_id_seq';
 
-export const saveProject = (data: JapieResponse, imageBase64: string): JapieResponse => {
+export const saveProject = (data: JapieResponse): JapieResponse => {
   // 1. Get current sequence ID
   const currentSeq = parseInt(localStorage.getItem(ID_SEQUENCE_KEY) || '1000', 10);
   const newId = currentSeq + 1;
   localStorage.setItem(ID_SEQUENCE_KEY, newId.toString());
 
-  // 2. Prepare record
+  // 2. Prepare record (without imageBase64 to save space)
   const projectRecord: JapieResponse = {
     ...data,
     id: `#${newId}`,
-    imageBase64: imageBase64,
+    imageBase64: undefined, // Don't store large base64 strings in localStorage
     timestamp: Date.now()
   };
 
@@ -21,7 +21,7 @@ export const saveProject = (data: JapieResponse, imageBase64: string): JapieResp
   const history = getProjects();
   history.unshift(projectRecord); // Add to top
   
-  // Prune if too large (localStorage limit protection, max 20 projects for this demo)
+  // Prune if too large (max 20 projects for this demo)
   if (history.length > 20) {
     history.pop();
   }
@@ -30,9 +30,8 @@ export const saveProject = (data: JapieResponse, imageBase64: string): JapieResp
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   } catch (e) {
     console.error("Storage quota exceeded", e);
-    // Fallback: don't save image if quota exceeded
-    projectRecord.imageBase64 = undefined; 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([projectRecord, ...history.slice(1)]));
+    // If still failing, just save the latest project
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([projectRecord]));
   }
 
   return projectRecord;

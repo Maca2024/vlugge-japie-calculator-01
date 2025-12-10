@@ -1,12 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { Logo } from './components/Logo';
-import { AnalysisView } from './components/AnalysisView';
-import { ChatDrawer } from './components/ChatDrawer';
-import { ProjectList } from './components/ProjectList';
 import { analyzeImage, createChatSession } from './services/geminiService';
 import { saveProject, getProjects } from './services/storageService';
 import { JapieResponse, AnalysisState } from './types';
 import { Camera, Loader2, MessageSquare, AlertCircle, History, ArrowLeft } from 'lucide-react';
+
+// Lazy load heavy components
+const AnalysisView = lazy(() => import('./components/AnalysisView').then(module => ({ default: module.AnalysisView })));
+const ChatDrawer = lazy(() => import('./components/ChatDrawer').then(module => ({ default: module.ChatDrawer })));
+const ProjectList = lazy(() => import('./components/ProjectList').then(module => ({ default: module.ProjectList })));
+
+// Loading fallback component
+const LoadingFallback: React.FC = () => (
+  <div className="flex items-center justify-center p-8">
+    <Loader2 className="w-8 h-8 text-brand-accent animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [state, setState] = useState<AnalysisState>('idle');
@@ -16,11 +25,22 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<JapieResponse[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
 
   // Load history on mount
   useEffect(() => {
     setProjects(getProjects());
   }, []);
+
+  // Cleanup blob URL on unmount or when result changes
+  useEffect(() => {
+    return () => {
+      if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
+    };
+  }, [result]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -34,17 +54,32 @@ const App: React.FC = () => {
     setState('analyzing');
     setErrorMsg(null);
 
+    // Cleanup previous blob URL if exists
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+    }
+
+    // Create Blob URL for preview
+    const blobUrl = URL.createObjectURL(file);
+    currentBlobUrlRef.current = blobUrl;
+
+    // Read file as base64 for API call only
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64 = reader.result as string;
         // 1. Analyze
         const response = await analyzeImage(base64);
-        // 2. Save
-        const savedProject = saveProject(response, base64);
+        // 2. Save without base64 image (metadata only)
+        const savedProject = saveProject(response);
         
-        // 3. Update State
-        setResult(savedProject);
+        // 3. Update State with Blob URL for preview
+        const projectWithPreview = {
+          ...savedProject,
+          imageBase64: blobUrl, // Use Blob URL instead of base64
+        };
+        
+        setResult(projectWithPreview);
         setProjects(getProjects()); // Refresh list
         createChatSession(savedProject); // Initialize chatbot context
         setState('success');
@@ -66,6 +101,11 @@ const App: React.FC = () => {
   const triggerUpload = () => fileInputRef.current?.click();
 
   const goHome = () => {
+    // Cleanup blob URL
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
     setState('idle');
     setResult(null);
   };
@@ -149,7 +189,9 @@ const App: React.FC = () => {
               </div>
             </div>
             {/* Show recent projects below */}
-            <ProjectList projects={projects.slice(0, 3)} onSelect={handleProjectSelect} />
+            <Suspense fallback={<LoadingFallback />}>
+              <ProjectList projects={projects.slice(0, 3)} onSelect={handleProjectSelect} />
+            </Suspense>
           </>
         )}
 
@@ -159,7 +201,9 @@ const App: React.FC = () => {
                     <h2 className="text-3xl font-bold text-white mb-2">Project Archief</h2>
                     <p className="text-gray-400">Database met alle voorgaande calculaties.</p>
                 </div>
-                <ProjectList projects={projects} onSelect={handleProjectSelect} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <ProjectList projects={projects} onSelect={handleProjectSelect} />
+                </Suspense>
             </div>
         )}
 
@@ -198,7 +242,9 @@ const App: React.FC = () => {
         )}
 
         {state === 'success' && result && (
-          <AnalysisView data={result} onReset={goHome} />
+          <Suspense fallback={<LoadingFallback />}>
+            <AnalysisView data={result} onReset={goHome} />
+          </Suspense>
         )}
       </main>
 
@@ -216,11 +262,13 @@ const App: React.FC = () => {
       )}
 
       {/* Chat Interface */}
-      <ChatDrawer 
-        isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
-        projectName={result?.project.naam || "Project"} 
-      />
+      <Suspense fallback={null}>
+        <ChatDrawer 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)} 
+          projectName={result?.project.naam || "Project"} 
+        />
+      </Suspense>
     </div>
   );
 };
