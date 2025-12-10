@@ -2,7 +2,12 @@ import { GoogleGenAI } from "@google/genai";
 import { JAPIE_SYSTEM_PROMPT, MODEL_NAME } from "../constants";
 import { JapieResponse } from "../types";
 
-let chatSession: any | null = null;
+// Type for Gemini chat session
+interface GeminiChatSession {
+  sendMessageStream(params: { message: string }): Promise<AsyncIterable<{ text: string }>>;
+}
+
+let chatSession: GeminiChatSession | null = null;
 
 export const analyzeImage = async (base64Image: string): Promise<JapieResponse> => {
   if (!process.env.API_KEY) {
