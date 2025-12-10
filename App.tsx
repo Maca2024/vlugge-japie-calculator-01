@@ -25,11 +25,22 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<JapieResponse[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
 
   // Load history on mount
   useEffect(() => {
     setProjects(getProjects());
   }, []);
+
+  // Cleanup blob URL on unmount or when result changes
+  useEffect(() => {
+    return () => {
+      if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
+    };
+  }, [result]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -43,17 +54,32 @@ const App: React.FC = () => {
     setState('analyzing');
     setErrorMsg(null);
 
+    // Cleanup previous blob URL if exists
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+    }
+
+    // Create Blob URL for preview
+    const blobUrl = URL.createObjectURL(file);
+    currentBlobUrlRef.current = blobUrl;
+
+    // Read file as base64 for API call only
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64 = reader.result as string;
         // 1. Analyze
         const response = await analyzeImage(base64);
-        // 2. Save
-        const savedProject = saveProject(response, base64);
+        // 2. Save without base64 image (metadata only)
+        const savedProject = saveProject(response);
         
-        // 3. Update State
-        setResult(savedProject);
+        // 3. Update State with Blob URL for preview
+        const projectWithPreview = {
+          ...savedProject,
+          imageBase64: blobUrl, // Use Blob URL instead of base64
+        };
+        
+        setResult(projectWithPreview);
         setProjects(getProjects()); // Refresh list
         createChatSession(savedProject); // Initialize chatbot context
         setState('success');
@@ -75,6 +101,11 @@ const App: React.FC = () => {
   const triggerUpload = () => fileInputRef.current?.click();
 
   const goHome = () => {
+    // Cleanup blob URL
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
     setState('idle');
     setResult(null);
   };
