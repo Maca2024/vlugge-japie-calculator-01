@@ -1,8 +1,8 @@
-import { GoogleGenAI, ChatSession } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { JAPIE_SYSTEM_PROMPT, MODEL_NAME } from "../constants";
 import { JapieResponse } from "../types";
 
-let chatSession: ChatSession | null = null;
+let chatSession: any | null = null;
 
 export const analyzeImage = async (base64Image: string): Promise<JapieResponse> => {
   if (!process.env.API_KEY) {
